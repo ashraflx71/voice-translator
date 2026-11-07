@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>مترجم صوتي</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1B2A41">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#E9EEF5;--ink:#1B2A41;--card:#fff;--acc:#2F5BEA;--rec:#D6453D;--mut:#5B6B82}
+@media(prefers-color-scheme:dark){:root{--bg:#121A28;--ink:#E8EEF8;--card:#1C2740;--acc:#6C8CFF;--rec:#FF6B61;--mut:#9AA9C2}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:Tajawal,system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:16px}
+main{width:100%;max-width:520px;display:flex;flex-direction:column;gap:14px}
+h1{font-size:1.5rem;font-weight:800;margin:4px 0}
+.langs{display:flex;gap:8px;align-items:center}
+select{flex:1;padding:12px;border-radius:12px;border:2px solid var(--ink);background:var(--card);color:var(--ink);font:inherit;font-weight:700}
+.swap{border:0;background:var(--ink);color:var(--bg);width:44px;height:44px;border-radius:50%;font-size:1.2rem;cursor:pointer}
+.box{background:var(--card);border-radius:18px;padding:16px;min-height:110px}
+.box small{color:var(--mut);font-weight:700}
+.box p{margin:6px 0 0;font-size:1.25rem;line-height:1.6;word-break:break-word}
+#out p{font-size:1.45rem;font-weight:700;color:var(--acc)}
+.mic{align-self:center;width:96px;height:96px;border-radius:50%;border:0;background:var(--acc);color:#fff;font-size:2.4rem;cursor:pointer;margin:8px 0}
+.mic.on{background:var(--rec);animation:p 1.1s infinite}
+@keyframes p{50%{box-shadow:0 0 0 18px rgba(214,69,61,.2)}}
+@media(prefers-reduced-motion:reduce){.mic.on{animation:none}}
+button:focus-visible,select:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.row{display:flex;gap:8px}
+.row button{flex:1;padding:10px;border-radius:12px;border:2px solid var(--ink);background:transparent;color:var(--ink);font:inherit;font-weight:700;cursor:pointer}
+label.conv{display:flex;gap:10px;align-items:center;font-weight:700;background:var(--card);padding:12px 14px;border-radius:12px}label.conv input{width:20px;height:20px;accent-color:var(--acc)}
+#msg{text-align:center;color:var(--mut);min-height:1.5em}
+</style>
+</head>
+<body>
+<main>
+<h1>مترجم صوتي</h1>
+<div class="langs">
+<select id="from" aria-label="لغة الكلام"></select>
+<button class="swap" id="swap" aria-label="عكس اللغتين">⇄</button>
+<select id="to" aria-label="لغة الترجمة"></select>
+</div>
+<label class="conv"><input type="checkbox" id="conv"> وضع المحادثة: بعد كل ترجمة تتبدل اللغة ويسمع الطرف الآخر</label>
+<div class="box" id="src"><small>ما قلته</small><p>—</p></div>
+<div class="box" id="out"><small>الترجمة</small><p>—</p></div>
+<button class="mic" id="mic" aria-label="ابدأ التحدث">🎙</button>
+<div id="msg">اضغط على الميكروفون وتكلم</div>
+<div class="row"><button id="again">🔊 أعد النطق</button><button id="copy">نسخ الترجمة</button></div>
+</main>
+<script>
+const L=[["ar-EG","ar","العربية"],["en-US","en","English"],["fr-FR","fr","Français"],["es-ES","es","Español"],["de-DE","de","Deutsch"],["tr-TR","tr","Türkçe"],["it-IT","it","Italiano"],["ru-RU","ru","Русский"],["hi-IN","hi","हिन्दी"],["zh-CN","zh","中文"]];
+const $=id=>document.getElementById(id),from=$("from"),to=$("to"),mic=$("mic"),msg=$("msg");
+L.forEach((l,i)=>{from.add(new Option(l[2],i));to.add(new Option(l[2],i))});
+from.value=0;to.value=1;
+try{from.value=localStorage.getItem("f")??0;to.value=localStorage.getItem("t")??1}catch(e){}
+const save=()=>{try{localStorage.setItem("f",from.value);localStorage.setItem("t",to.value)}catch(e){}};
+from.onchange=to.onchange=save;
+$("swap").onclick=()=>{[from.value,to.value]=[to.value,from.value];save()};
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec,last="";
+function speak(t,cb){if(!t)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang=L[to.value][0];if(cb){u.onend=cb;u.onerror=cb}speechSynthesis.speak(u)}
+async function translate(t){
+  msg.textContent="جاري الترجمة…";
+  try{
+    const r=await fetch("https://api.mymemory.translated.net/get?q="+encodeURIComponent(t)+"&langpair="+L[from.value][1]+"|"+L[to.value][1]);
+    const d=await r.json();last=d.responseData.translatedText;
+    $("out").querySelector("p").textContent=last;msg.textContent="";speak(last,$("conv").checked?()=>{[from.value,to.value]=[to.value,from.value];save();start()}:null);
+  }catch(e){msg.textContent="تعذرت الترجمة. تأكد من الاتصال بالإنترنت وحاول مرة أخرى."}
+}
+function start(){
+  if(!SR){msg.textContent="المتصفح لا يدعم التعرف على الصوت. افتح الصفحة في Chrome أو Edge.";return}
+  if(rec){rec.stop();return}
+  rec=new SR();rec.lang=L[from.value][0];rec.interimResults=true;
+  rec.onstart=()=>{mic.classList.add("on");msg.textContent="أسمعك…"};
+  rec.onresult=e=>{const t=[...e.results].map(r=>r[0].transcript).join(" ");$("src").querySelector("p").textContent=t;if(e.results[e.results.length-1].isFinal)translate(t)};
+  rec.onerror=e=>{msg.textContent=e.error==="not-allowed"?"اسمح للمتصفح باستخدام الميكروفون من إعدادات الموقع.":"لم أسمع شيئًا. حاول مرة أخرى."};
+  rec.onend=()=>{mic.classList.remove("on");rec=null};
+  rec.start();
+}
+mic.onclick=start;
+$("again").onclick=()=>speak(last);
+$("copy").onclick=()=>{if(last)navigator.clipboard.writeText(last).then(()=>msg.textContent="تم النسخ")};
+if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>
